@@ -1,0 +1,166 @@
+{
+  "models": [
+    {
+      "model_name": "qwen-tts-1.7B",
+      "display_name": "Qwen TTS 1.7B",
+      "hf_repo_id": "mlx-community/Qwen3-TTS-12Hz-1.7B-Base-bf16",
+      "downloaded": true,
+      "downloading": false,
+      "size_mb": 4333.696550369263,
+      "loaded": false
+    },
+    {
+      "model_name": "qwen-tts-0.6B",
+      "display_name": "Qwen TTS 0.6B",
+      "hf_repo_id": "mlx-community/Qwen3-TTS-12Hz-0.6B-Base-bf16",
+      "downloaded": true,
+      "downloading": false,
+      "size_mb": 2399.5785369873047,
+      "loaded": true
+    },
+    {
+      "model_name": "qwen-custom-voice-1.7B",
+      "display_name": "Qwen CustomVoice 1.7B",
+      "hf_repo_id": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "qwen-custom-voice-0.6B",
+      "display_name": "Qwen CustomVoice 0.6B",
+      "hf_repo_id": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "luxtts",
+      "display_name": "LuxTTS (Fast, CPU-friendly)",
+      "hf_repo_id": "YatharthS/LuxTTS",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "chatterbox-tts",
+      "display_name": "Chatterbox TTS (Multilingual)",
+      "hf_repo_id": "ResembleAI/chatterbox",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "chatterbox-turbo",
+      "display_name": "Chatterbox Turbo (English, Tags)",
+      "hf_repo_id": "ResembleAI/chatterbox-turbo",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "tada-1b",
+      "display_name": "TADA 1B (English)",
+      "hf_repo_id": "HumeAI/tada-1b",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "tada-3b-ml",
+      "display_name": "TADA 3B Multilingual",
+      "hf_repo_id": "HumeAI/tada-3b-ml",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "kokoro",
+      "display_name": "Kokoro 82M",
+      "hf_repo_id": "hexgrad/Kokoro-82M",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "whisper-base",
+      "display_name": "Whisper Base",
+      "hf_repo_id": "openai/whisper-base",
+      "downloaded": true,
+      "downloading": false,
+      "size_mb": 281.1210136413574,
+      "loaded": true
+    },
+    {
+      "model_name": "whisper-small",
+      "display_name": "Whisper Small",
+      "hf_repo_id": "openai/whisper-small",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "whisper-medium",
+      "display_name": "Whisper Medium",
+      "hf_repo_id": "openai/whisper-medium",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "whisper-large",
+      "display_name": "Whisper Large",
+      "hf_repo_id": "openai/whisper-large-v3",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "whisper-turbo",
+      "display_name": "Whisper Turbo",
+      "hf_repo_id": "openai/whisper-large-v3-turbo",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "qwen3-0.6b",
+      "display_name": "Qwen3 0.6B",
+      "hf_repo_id": "mlx-community/Qwen3-0.6B-4bit",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "qwen3-1.7b",
+      "display_name": "Qwen3 1.7B",
+      "hf_repo_id": "mlx-community/Qwen3-1.7B-4bit",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    },
+    {
+      "model_name": "qwen3-4b",
+      "display_name": "Qwen3 4B",
+      "hf_repo_id": "mlx-community/Qwen3-4B-4bit",
+      "downloaded": false,
+      "downloading": false,
+      "size_mb": null,
+      "loaded": false
+    }
+  ]
+}
