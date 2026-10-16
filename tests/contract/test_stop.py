@@ -2,12 +2,18 @@ import asyncio
 
 import httpx
 
-from app.chunking import make_chunks
+import re
+
 from app.pipeline import ChunkPipeline
 from app.server import create_api
 from app.session import SessionRegistry
 
 TEXT = "First sentence is here. Second sentence is here. Third sentence is here."
+
+
+async def words(text):
+    for m in re.finditer(r"\S+\s*", text):
+        yield m.group()
 
 
 class SlowClient:
@@ -29,8 +35,8 @@ async def test_stop_aborts_in_flight_and_chunk_returns_409():
     s = reg.get("sess")
     s.transition("loading"); s.transition("generating")
     client = SlowClient()
-    s.chunks = make_chunks(TEXT)
-    s.pipeline = ChunkPipeline(s, client, s.chunks, TEXT)
+    s.text = TEXT
+    s.pipeline = ChunkPipeline(s, client, words(TEXT))
     s.pipeline.start()
     api = create_api(reg)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=api), base_url="http://t") as http:

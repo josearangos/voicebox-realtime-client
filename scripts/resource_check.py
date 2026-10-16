@@ -13,9 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.chunking import make_chunks                          # noqa: E402
-from app.pipeline import ChunkPipeline                        # noqa: E402
+from app.pipeline import ChunkPipeline, EndOfStream                      # noqa: E402
 from app.session import GenerationSession                     # noqa: E402
+from app.token_stream import simulate_llm_stream              # noqa: E402
 from app.voicebox_client import ChunkAudio                    # noqa: E402
 
 pcm = b"\x00\x01" * 250_000                                   # ~1 s... 0.5 MB per chunk
@@ -31,13 +31,16 @@ class Fake:
 
 async def one_generation(s):
     s.reset_for_new_run()
-    s.chunks = make_chunks(TEXT)
-    p = ChunkPipeline(s, Fake(), s.chunks, TEXT)
+    s.text = TEXT
+    p = ChunkPipeline(s, Fake(), simulate_llm_stream(TEXT, 100_000))
     s.pipeline = p
     s.transition("generating")
     p.start()
-    for i in range(len(s.chunks)):
-        await p.get_chunk(i)
+    for i in range(1000):
+        try:
+            await p.get_chunk(i)
+        except EndOfStream:
+            break
     await p.task
     s.transition("playing"); s.transition("completed")
 

@@ -32,7 +32,8 @@ class InvalidTransition(Exception):
 class GenerationSession:
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     state: str = "idle"
-    mode: str = "full-response"
+    mode: str = "streamed"
+    run_id: str = ""
     text: str = ""
     voice_id: str = ""
     language: str = "en"
@@ -81,6 +82,7 @@ class GenerationSession:
         self.completed_audio = None
         self.received_all = False
         self.chunks = []
+        self.run_id = uuid.uuid4().hex
         self.error = None
         self.stop_event = threading.Event()
         self.transition("loading")

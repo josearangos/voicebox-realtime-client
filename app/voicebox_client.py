@@ -43,11 +43,25 @@ def _timeout(read: float) -> httpx.Timeout:
     return httpx.Timeout(read, connect=config.CONNECT_TIMEOUT_S)
 
 
+# Voicebox model_name -> (engine, model_size); "" means the engine has no size option.
+_FIXED_MODELS = {
+    "luxtts": ("luxtts", ""),
+    "chatterbox-tts": ("chatterbox", ""),
+    "chatterbox-turbo": ("chatterbox_turbo", ""),
+    "tada-1b": ("tada", "1B"),
+    "tada-3b-ml": ("tada", "3B"),
+    "kokoro": ("kokoro", ""),
+}
+_SIZED_PREFIXES = {"qwen-tts-": "qwen", "qwen-custom-voice-": "qwen_custom_voice"}
+
+
 def map_model(model_name: str) -> tuple[str, str] | None:
-    """qwen-tts-<size> -> (qwen, <size>); anything else is hidden (research D4)."""
-    prefix = "qwen-tts-"
-    if model_name.startswith(prefix) and model_name[len(prefix):]:
-        return "qwen", model_name[len(prefix):]
+    """Voicebox TTS model name -> (engine, size); STT and LLM models are hidden."""
+    if model_name in _FIXED_MODELS:
+        return _FIXED_MODELS[model_name]
+    for prefix, engine in _SIZED_PREFIXES.items():
+        if model_name.startswith(prefix) and model_name[len(prefix):]:
+            return engine, model_name[len(prefix):]
     return None
 
 
@@ -132,7 +146,7 @@ class VoiceboxClient:
                                engine: str, model_size: str) -> ChunkAudio:
         """One synthesis request. No automatic retry (Principle VI)."""
         body = {"profile_id": voice_id, "text": text, "language": language,
-                "engine": engine, "model_size": model_size}
+                "engine": engine, "model_size": model_size or None}
         t0 = time.monotonic()
         try:
             async with self._http(config.CHUNK_READ_TIMEOUT_S) as c:
@@ -140,6 +154,11 @@ class VoiceboxClient:
                     connect_s = time.monotonic() - t0
                     if r.status_code == 422:
                         raise VoiceboxRejected()
+                    if r.status_code == 400:
+                        raise VoiceboxRejected(
+                            "Voicebox does not accept this voice with this model. Kokoro and "
+                            "CustomVoice need a preset voice profile; use a Qwen TTS model for "
+                            "cloned voices.")
                     if r.status_code >= 400:
                         raise VoiceboxFailed()
                     if "audio/wav" not in r.headers.get("content-type", ""):

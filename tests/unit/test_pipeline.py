@@ -1,10 +1,10 @@
 import asyncio
+import re
 
 import pytest
 
-from app.chunking import make_chunks
 from app.errors import VoiceboxFailed
-from app.pipeline import ChunkPipeline, ChunkStopped, concat_wavs, mode_for
+from app.pipeline import ChunkPipeline, ChunkStopped, EndOfStream, concat_wavs
 from app.session import GenerationSession
 from app.voicebox_client import ChunkAudio, wav_duration
 
@@ -13,6 +13,14 @@ from pathlib import Path
 WAV = (Path(__file__).parent.parent / "fixtures" / "tiny.wav").read_bytes()
 TEXT = ("This is the first sentence of the test. This is the second sentence of the test. "
         "And here is the third sentence of the test. Finally the fourth sentence arrives.")
+
+
+async def words(text, gate: asyncio.Event | None = None):
+    for m in re.finditer(r"\S+\s*", text):
+        if gate is not None:
+            await gate.wait()
+        yield m.group()
+        await asyncio.sleep(0)
 
 
 class FakeClient:
@@ -28,16 +36,15 @@ class FakeClient:
         return ChunkAudio(WAV, 0.1, 0.0, 0.0, 0.0)
 
 
-def make(client):
+def make(client, gate=None):
     s = GenerationSession()
     s.state = "generating"
-    chunks = make_chunks(TEXT)
-    assert len(chunks) >= 3
-    return s, ChunkPipeline(s, client, chunks, TEXT)
+    s.text = TEXT
+    return s, ChunkPipeline(s, client, words(TEXT, gate))
 
 
 async def settle():
-    for _ in range(10):
+    for _ in range(100):
         await asyncio.sleep(0)
 
 
@@ -53,17 +60,41 @@ async def test_prefetch_one_ahead_and_order():
     await p.get_chunk(1)
     await settle()
     assert p.requested_log == [0, 1, 2]
-    for i in range(2, len(p.chunks)):
-        await p.get_chunk(i)
+    i = 2
+    while True:
+        try:
+            await p.get_chunk(i)
+        except EndOfStream:
+            break
+        i += 1
     await p.task
+    assert len(p.chunks) >= 3 and i == len(p.chunks)
     assert p.requested_log == list(range(len(p.chunks)))
+    assert " ".join(p.texts) == TEXT
     assert s.received_all and s.completed_audio
 
 
-def test_mode_labels():
-    assert mode_for(1) == "full-response"
-    assert mode_for(2) == "sentence-chunked"
-    assert mode_for(5) == "sentence-chunked"
+async def test_first_chunk_is_requested_before_stream_ends():
+    gate = asyncio.Event()
+    fake = FakeClient()
+    s, p = make(fake, gate)
+    p.start()
+    await settle()
+    assert fake.calls == []                       # no words yet, nothing to speak
+    gate.set()
+    await p.get_chunk(0)
+    assert fake.calls[0] == "This is the first sentence of"   # hard cap: 6 words
+    assert TEXT[p.chunks[0].char_start:p.chunks[0].char_end] == "This is the first sentence of"
+    assert p.chunks[0].segments[0].text == "This"
+    await p.stop()
+
+
+def test_is_last_only_after_stream_ends():
+    s, p = make(FakeClient())
+    p.texts = ["a", "b"]
+    assert not p.is_last(1)
+    p.feed_done = True
+    assert p.is_last(1) and not p.is_last(0)
 
 
 async def test_mid_session_failure():

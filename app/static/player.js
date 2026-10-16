@@ -47,7 +47,7 @@
   function activeSegment(chunk, t, duration) {   // same math as app/teleprompter.py
     if (!isFinite(t) || !duration || duration <= 0 || !run.lens[chunk]) return null;
     const lens = run.lens[chunk];
-    const base = run.lens.slice(0, chunk).reduce((n, c) => n + c.length, 0);
+    const base = run.bases[chunk];
     const pos = Math.min(Math.max(t / duration, 0), 1) * lens.reduce((a, b) => a + b, 0);
     let acc = 0;
     for (let i = 0; i < lens.length; i++) { acc += lens[i]; if (pos < acc) return base + i; }
@@ -76,6 +76,30 @@
     if (message) { const n = $("#vb-buffering"); if (n) n.textContent = ""; }
   }
 
+  function appendChunk(r, i, text, br) {   // words are added as textContent: never parsed as HTML
+    const box = $("#vb-teleprompter");
+    const words = text.split(/(\s+)/);
+    const lens = [];
+    r.bases[i] = i === 0 ? 0 : r.bases[i - 1] + r.lens[i - 1].length;
+    const span = document.createElement("span");
+    span.className = "vb-chunk"; span.dataset.chunk = i;
+    if (box && i > 0) box.appendChild(br ? document.createElement("br") : document.createTextNode(" "));
+    words.forEach((w) => {
+      if (!w) return;
+      if (/^\s+$/.test(w)) { span.appendChild(w.includes("\n") ? document.createElement("br") : document.createTextNode(" ")); return; }
+      const el = document.createElement("span");
+      el.className = "vb-seg upcoming"; el.dataset.idx = r.bases[i] + lens.length; el.textContent = w;
+      lens.push(w.length + 1);
+      span.appendChild(el);
+    });
+    r.lens[i] = lens;
+    if (box) box.appendChild(span);
+  }
+
+  function finish() {
+    run.done = true; paint(Infinity); event("ended"); setButtons(); syncServerUi();
+  }
+
   async function fetchChunk(i) {
     if (!run || run.fetching.has(i) || run.urls[i] || i >= run.count) return;
     const r = run;
@@ -85,10 +109,17 @@
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ session: r.session, index: i }) });
       if (r !== run || r.stopped) return;
       if (res.status === 409) return;
+      if (res.status === 204) {                // the word stream ended: chunk i does not exist
+        r.count = Math.min(r.count, i);
+        if (r.waiting === i) { r.waiting = null; stallEnd(); finish(); }
+        return;
+      }
       if (!res.ok) { fail(); return; }
       const blob = await res.blob();
       if (r !== run || r.stopped) return;
       r.durations[i] = parseFloat(res.headers.get("X-Duration"));
+      appendChunk(r, i, decodeURIComponent(res.headers.get("X-Text") || ""), res.headers.get("X-Break") === "1");
+      if (res.headers.get("X-Last") === "1") r.count = Math.min(r.count, i + 1);
       r.urls[i] = URL.createObjectURL(blob);
       if (i === 0 && r.current === -1) playChunk(0);
       else if (r.waiting === i) { r.waiting = null; stallEnd(); playChunk(i); }
@@ -128,18 +159,14 @@
         run.waiting = next; run.stalled = true; event("stall_start"); buffering(true);
         fetchChunk(next);
       }
-    } else {
-      run.done = true; paint(Infinity); event("ended"); setButtons(); syncServerUi();
-    }
+    } else finish();
   });
 
   function start(meta) {
     if (run) release();
     audio.pause(); audio.removeAttribute("src");
-    const lens = [...document.querySelectorAll("#vb-teleprompter .vb-chunk")].map((c) =>
-      [...c.querySelectorAll(".vb-seg")].map((s) => Number(s.dataset.len)));
-    run = { token: meta.dataset.run, session: meta.dataset.session, count: Number(meta.dataset.chunks),
-            lens, urls: [], durations: [], fetching: new Set(), ctrl: new AbortController(),
+    run = { token: meta.dataset.run, session: meta.dataset.session, count: Infinity,
+            lens: [], bases: [], urls: [], durations: [], fetching: new Set(), ctrl: new AbortController(),
             current: -1, waiting: null, paused: false, stalled: false, started: false,
             done: false, stopped: false, failed: false, lastActive: null };
     paint(null); setButtons(); syncServerUi();

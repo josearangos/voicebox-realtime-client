@@ -6,6 +6,18 @@ follow it in a teleprompter. It runs no speech model itself and never starts or 
 
 **Tested with**: Python 3.13.0, Gradio 6.30.0, httpx 0.28.1, uvicorn 0.54.0, Voicebox API v0.5.0.
 
+## Architecture
+
+![Architecture diagram](docs/architecture.png)
+
+Interactive version: `.archify/architecture-voicebox-client-20261016-120000/voicebox-client.html`.
+
+## Prerequisite: install Voicebox
+
+This client needs a running [Voicebox](https://voicebox.sh/) (open-source local TTS server).
+Install it first from <https://voicebox.sh/>, launch it, and confirm it is listening at
+`http://127.0.0.1:17493` (or set `VOICEBOX_URL`) before starting this app.
+
 ## Install
 
 Use Python 3.10–3.13. Do **not** use 3.14: the pinned Gradio does not declare support for it.
@@ -36,11 +48,18 @@ python -m app        # http://127.0.0.1:7860
 
 ## Use
 
-Enter text (max 5,000 characters), choose a voice and model, press **Generate**. The status line
-shows the session state and mode (`sentence-chunked` for 2+ chunks, `full response` for one).
-Generate and the inputs are locked while a session is active. Pause/Resume, Stop, Restart,
-Replay and Download act on the same audio that drives the highlight; Replay and Download appear
-after a session completes.
+Enter text (max 5,000 characters), choose a voice, a model and a simulated LLM speed (words per
+second), press **Generate**. The app feeds the text in word by word, like an LLM stream, and cuts
+it into chunks as words arrive: a tiny first chunk (3-6 words, ending at a comma or sentence end
+when possible) is sent to Voicebox immediately, then chunks grow (up to 40 words) so the fixed
+per-request cost is spread out. Each chunk plays as soon as its audio is ready, and its words
+appear in the teleprompter at that moment. Generate and the inputs are locked while a session is
+active. Pause/Resume, Stop, Restart, Replay and Download act on the same audio that drives the
+highlight; Replay and Download appear after a session completes.
+
+Voicebox returns a chunk's audio only when the whole chunk is synthesized, so time to first audio
+is the synthesis time of that first small chunk, and later chunks can still cause a
+"buffering…" pause if Voicebox generates slower than real time.
 
 ## Test
 

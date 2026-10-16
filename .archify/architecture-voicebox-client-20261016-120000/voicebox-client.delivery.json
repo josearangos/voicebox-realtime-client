@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "8449054b-56df-4390-ad30-982cb94f4ce8",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/josearangos/Documents/Study/voicebox-realtime-client/.archify/architecture-voicebox-client-20261016-120000/candidate.json",
+  "output": "/Users/josearangos/Documents/Study/voicebox-realtime-client/.archify/architecture-voicebox-client-20261016-120000/voicebox-client.html",
+  "specification": {
+    "sha256": "384788e92241ef59c694c2d05ba754190ce894c73bcde77d6d502e9247498166",
+    "bytes": 3198
+  },
+  "artifact": {
+    "sha256": "721f860a880e7d4b1339cbc486356b8bd2c7ee5bfe6b17610b7bf58de1707b6e",
+    "bytes": 759168
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Voicebox Realtime Client",
+    "output": ".archify/architecture-voicebox-client-20261016-120000/voicebox-client.html",
+    "quality_profile": "showcase",
+    "repository": { "url": "https://github.com/josearangos/voicebox-realtime-client.git", "provider": "github", "revision": "0d8f3ac48553892e4472d61d1f8091a81edb4dfd" }
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "User", "sublabel": "Browser", "pos": [40, 40], "size": [120, 60] },
+    { "id": "ui", "type": "frontend", "label": "Gradio UI + Player", "sublabel": "build_ui, player.js", "pos": [250, 40], "size": [160, 64], "sources": [{ "path": "app/server.py", "line": 168, "end_line": 260 }, { "path": "app/static/player.js", "line": 84 }] },
+    { "id": "api", "type": "backend", "label": "FastAPI /api/*", "sublabel": "chunk, state, stop, metrics, audio", "pos": [530, 40], "size": [170, 64], "sources": [{ "path": "app/server.py", "line": 27, "end_line": 122 }] },
+    { "id": "pipeline", "type": "backend", "label": "ChunkPipeline", "sublabel": "sequential, 1-chunk prefetch", "pos": [820, 40], "size": [170, 64], "sources": [{ "path": "app/pipeline.py", "line": 47, "end_line": 135 }] },
+    { "id": "client", "type": "backend", "label": "VoiceboxClient", "sublabel": "httpx async", "pos": [1110, 40], "size": [150, 64], "sources": [{ "path": "app/voicebox_client.py", "line": 85, "end_line": 159 }] },
+    { "id": "voicebox", "type": "external", "label": "Voicebox TTS", "sublabel": "127.0.0.1:17493", "pos": [1110, 220], "size": [150, 60], "sources": [{ "path": "app/voicebox_client.py", "line": 114, "end_line": 145 }] },
+    { "id": "session", "type": "database", "label": "SessionRegistry", "sublabel": "in-memory state + audio", "pos": [530, 220], "size": [170, 60], "sources": [{ "path": "app/session.py", "line": 32, "end_line": 112 }] },
+    { "id": "chunking", "type": "backend", "label": "Chunking", "sublabel": "sentence split", "pos": [250, 220], "size": [160, 60], "sources": [{ "path": "app/chunking.py", "line": 68 }, { "path": "app/server.py", "line": 168, "end_line": 260 }] }
+  ],
+  "boundaries": [],
+  "connections": [
+    { "id": "user-ui", "from": "user", "to": "ui", "label": "text", "variant": "emphasis" },
+    { "id": "ui-api", "from": "ui", "to": "api", "label": "POST chunk", "variant": "emphasis" },
+    { "id": "api-pipeline", "from": "api", "to": "pipeline", "label": "get_chunk" },
+    { "id": "pipeline-client", "from": "pipeline", "to": "client", "label": "synthesize" },
+    { "id": "client-voicebox", "from": "client", "to": "voicebox", "label": "HTTP stream" },
+    { "id": "api-session", "from": "api", "to": "session", "label": "state", "variant": "dashed" },
+    { "id": "ui-chunking", "from": "ui", "to": "chunking", "label": "split", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Flow", "items": ["Text is split into sentence chunks", "Chunk k+1 is synthesized while k plays", "WAV returns with X-Duration for the teleprompter"] },
+    { "dot": "amber", "title": "Scope", "items": ["No speech model runs locally", "Only Voicebox host is contacted"] }
+  ]
+}

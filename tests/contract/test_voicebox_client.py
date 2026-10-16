@@ -42,7 +42,11 @@ async def test_list_models_filters_and_maps(client):
 
 def test_map_model():
     assert map_model("qwen-tts-0.6B") == ("qwen", "0.6B")
+    assert map_model("qwen-custom-voice-0.6B") == ("qwen_custom_voice", "0.6B")
+    assert map_model("kokoro") == ("kokoro", "")
+    assert map_model("tada-3b-ml") == ("tada", "3B")
     assert map_model("whisper-base") is None
+    assert map_model("qwen3-1.7b") is None
     assert map_model("qwen-tts-") is None
 
 

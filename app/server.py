@@ -5,22 +5,23 @@ import logging
 from pathlib import Path
 
 import gradio as gr
+from urllib.parse import quote
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import config
-from .chunking import make_chunks
 from .errors import VoiceboxError
 from .metrics import PerformanceRecord
-from .pipeline import ChunkPipeline, ChunkStopped, mode_for
+from .pipeline import ChunkPipeline, ChunkStopped, EndOfStream
 from .session import GenerationSession, InvalidTransition, SessionRegistry, registry, validate_request
-from .teleprompter import render_html
+from .token_stream import simulate_llm_stream
 from .voicebox_client import VoiceboxClient
 
 log = logging.getLogger("voicebox_client.server")
 STATIC = Path(__file__).parent / "static"
-MODE_LABEL = {"sentence-chunked": "sentence-chunked", "full-response": "full response"}
+MODE_LABEL = {"streamed": "word-streamed chunks"}
 
 
 # --------------------------------------------------------------------------- local routes
@@ -55,10 +56,16 @@ def create_api(reg: SessionRegistry = registry) -> FastAPI:
             return JSONResponse({"error": "Invalid chunk index."}, status_code=400)
         except ChunkStopped:
             return JSONResponse({"error": "Session stopped."}, status_code=409)
+        except EndOfStream:
+            return Response(status_code=204)             # the word stream ended before this chunk
         except VoiceboxError as e:
             return JSONResponse({"error": e.message}, status_code=502)
         return Response(wav, media_type="audio/wav",
-                        headers={"X-Duration": f"{duration:.4f}", "Cache-Control": "no-store"})
+                        headers={
+            "X-Duration": f"{duration:.4f}", "Cache-Control": "no-store",
+            "X-Text": quote(s.pipeline.texts[index]),
+            "X-Break": "1" if s.pipeline.breaks[index] else "0",
+            "X-Last": "1" if s.pipeline.is_last(index) else "0"})
 
     @api.post("/api/stop")
     async def stop(req: Request):
@@ -141,7 +148,7 @@ def status_html(s: GenerationSession | None, note: str = "", unavailable: bool =
         parts.append('<b>Voicebox unavailable</b>')
     else:
         parts.append(f'State: <b>{html.escape(state)}</b>')
-        if s and s.chunks:
+        if s and s.run_id:
             parts.append(f' · Mode: <b>{MODE_LABEL[s.mode]}</b>')
     parts.append(' <span id="vb-buffering"></span>')
     if s and s.error:
@@ -155,21 +162,22 @@ def status_html(s: GenerationSession | None, note: str = "", unavailable: bool =
     return "".join(parts)
 
 
-def teleprompter_wrap(s: GenerationSession | None, text: str = "") -> str:
-    if s is None or not s.chunks:
+def teleprompter_wrap(s: GenerationSession | None) -> str:
+    """Empty container; player.js appends each chunk's words as the chunk arrives."""
+    if s is None or not s.run_id:
         return '<div id="vb-meta" data-run=""></div><div class="vb-tp-empty">The teleprompter appears here.</div>'
-    meta = (f'<div id="vb-meta" data-run="{html.escape(s.id)}-{id(s.chunks)}" '
-            f'data-session="{html.escape(s.id)}" data-chunks="{len(s.chunks)}" '
-            f'data-mode="{html.escape(s.mode)}"></div>')
-    return (meta + '<div class="vb-approx">Highlight sync is approximate (sentence level).</div>'
-            + render_html(text, s.chunks))
+    meta = (f'<div id="vb-meta" data-run="{html.escape(s.run_id)}" '
+            f'data-session="{html.escape(s.id)}"></div>')
+    return (meta + '<div class="vb-approx">Words appear as the simulated LLM stream produces them; '
+            'highlight sync is approximate.</div><div id="vb-teleprompter" class="vb-tp" '
+            'aria-label="Teleprompter"></div>')
 
 
 def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Blocks:
     def lock(s: GenerationSession | None, note: str = "", unavailable: bool = False):
         free = s is None or s.can_generate
         return (gr.update(interactive=free and not unavailable), gr.update(interactive=free),
-                gr.update(interactive=free), gr.update(interactive=free),
+                gr.update(interactive=free), gr.update(interactive=free), gr.update(interactive=free),
                 status_html(s, note, unavailable))
 
     async def discover(request: gr.Request):
@@ -189,9 +197,10 @@ def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Bloc
                 status_html(s, note), gr.update(visible=False),
                 gr.update(interactive=bool(voices and models)))
 
-    async def generate(text: str, voice_id: str, model_name: str, request: gr.Request):
+    async def generate(text: str, voice_id: str, model_name: str, words_per_s: float,
+                       request: gr.Request):
         s = reg.get(request.session_hash)
-        tp = teleprompter_wrap(s, text)
+        tp = teleprompter_wrap(s)
         if not s.can_generate:
             return (*lock(s, "A session is already active."), tp)
         try:
@@ -211,13 +220,12 @@ def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Bloc
         s.reset_for_new_run()
         s.text, s.voice_id, s.language = text, voice.id, voice.language
         s.engine, s.model_size = model.engine, model.model_size
-        s.chunks = make_chunks(text)
-        s.mode = mode_for(len(s.chunks))
+        s.mode = "streamed"
         s.metrics = PerformanceRecord(s.id, len(text))
-        s.pipeline = ChunkPipeline(s, client, s.chunks, text)
+        s.pipeline = ChunkPipeline(s, client, simulate_llm_stream(text, words_per_s))
         s.transition("generating")
         s.pipeline.start()
-        return (*lock(s), teleprompter_wrap(s, text))
+        return (*lock(s), teleprompter_wrap(s))
 
     async def sync(request: gr.Request):
         return lock(reg.find(request.session_hash))
@@ -229,8 +237,8 @@ def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Bloc
             reg.drop(s.id)
 
     with gr.Blocks(title="Voicebox Realtime Client") as demo:
-        gr.Markdown("# Voicebox Realtime Client\nSentence-chunked speech with a teleprompter. "
-                    "Audio for each chunk starts as soon as that chunk is ready.")
+        gr.Markdown("# Voicebox Realtime Client\nSimulates an LLM streaming words: small chunks are sent "
+                    "to TTS as they form and play as soon as each one is ready.")
         status = gr.HTML(status_html(None), elem_id="vb-status")
         with gr.Row():
             voice_dd = gr.Dropdown(label="Voice", choices=[], interactive=True, elem_id="vb-voice")
@@ -238,6 +246,8 @@ def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Bloc
             retry = gr.Button("Retry", visible=False, elem_id="vb-retry")
         text = gr.Textbox(label=f"Text (max {config.MAX_TEXT_CHARS:,} characters)", lines=6,
                           elem_id="vb-text")
+        speed = gr.Slider(1, 30, value=6, step=1, label="Simulated LLM speed (words per second)",
+                          interactive=True, elem_id="vb-speed")
         generate_btn = gr.Button("Generate", variant="primary", interactive=False, elem_id="vb-generate")
         with gr.Row(elem_id="vb-controls"):
             gr.Button("Pause", interactive=False, elem_id="vb-pause")
@@ -249,11 +259,11 @@ def build_ui(client: VoiceboxClient, reg: SessionRegistry = registry) -> gr.Bloc
         with gr.Row(elem_id="vb-hidden"):
             sync_btn = gr.Button("sync", elem_id="vb-sync")
 
-        lock_out = [generate_btn, text, voice_dd, model_dd, status]
+        lock_out = [generate_btn, text, voice_dd, model_dd, speed, status]
         disc_out = [voice_dd, model_dd, status, retry, generate_btn]
         demo.load(discover, None, disc_out, show_progress="hidden")
         retry.click(discover, None, disc_out, show_progress="hidden")
-        generate_btn.click(generate, [text, voice_dd, model_dd], lock_out + [tp], show_progress="hidden")
+        generate_btn.click(generate, [text, voice_dd, model_dd, speed], lock_out + [tp], show_progress="hidden")
         sync_btn.click(sync, None, lock_out, show_progress="hidden", api_name=False)
         demo.unload(on_unload)
     return demo
@@ -265,4 +275,4 @@ def build_app(client: VoiceboxClient | None = None) -> FastAPI:
     demo = build_ui(client)
     return gr.mount_gradio_app(
         api, demo, path="/", server_name=config.HOST, server_port=config.PORT,
-        css_paths=STATIC / "app.css", head='<script src="/vb-static/player.js?v=1" defer></script>')
+        css_paths=STATIC / "app.css", head='<script src="/vb-static/player.js?v=2" defer></script>')
